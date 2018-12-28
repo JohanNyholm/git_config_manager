@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+
+import configparser
+import argparse
+import pathlib
+
+
+INDENTATION = ' ' * 4
+SECTIONS = ['alias']
+
+
+def _parse_config(path):
+    config = configparser.ConfigParser(interpolation=None)
+    if not config.read(path):
+        raise ValueError(f"Config file {path} not read")
+    return config
+
+
+def _write_config(config, path, section_restrictions=None):
+    with open(path, 'w') as target_file:
+        for section, section_items in config.items():
+            if not section_items:
+                continue
+            if section_restrictions is not None and section not in section_restrictions:
+                continue
+            target_file.write(f'[{section}]\n')
+            for key, value in sorted(section_items.items()):
+                target_file.write(f'{INDENTATION}{key} = {value}\n')
+
+
+def extract(args):
+    config = _parse_config(args.gitconfig)
+    _write_config(config, args.extractions, section_restrictions=SECTIONS)
+
+
+def merge(args):
+    gitconfig = _parse_config(args.gitconfig)
+    extractions = _parse_config(args.extractions)
+
+    for section, section_items in extractions.items():
+        if section not in gitconfig:
+            gitconfig.add_section(section)
+        for key, value in section_items.items():
+            gitconfig.set(section, key, value)
+    _write_config(gitconfig, args.gitconfig)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", choices=['extract', 'merge'])
+    parser.add_argument("--gitconfig", type=pathlib.Path, default=pathlib.Path.home() / '.gitconfig',
+                    help="path to .config file")
+    parser.add_argument("--extractions", type=str, default='gitconfig',
+                    help="path to extractions file")
+
+    args = parser.parse_args()
+
+    if args.gitconfig == args.extractions:
+        raise ValueError('congig and extraction path may not co-exist')
+    
+    if args.extractions == pathlib.Path.home():
+        raise ValueError('Extraction path should not be ~.gitconfig')
+
+
+    if args.command == 'extract':
+        extract(args)
+    elif args.command == 'merge':
+        merge(args)
+    else:
+        raise NotImplementedError(f"Command {args.command} not supported")
+    
+
+if __name__ == '__main__':
+    main()
